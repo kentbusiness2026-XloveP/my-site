@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>照護翻譯系統_Sistem Penerjemahan untuk Layanan Perawatan</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background:#1a1a1a; color:white; font-family:Arial; margin:0; padding:15px; }
+        h1 { text-align:center; color:#4CAF50; font-size:1.8em; margin:10px 0; }       
+        #recordBtn { display:block; width:90%; height:120px; border-radius:20px; background:#e74c3c; border:none; color:white; font-size:1.9em; margin:15px auto; cursor:pointer; transition:all 0.3s; touch-action:manipulation; user-select:none; -webkit-user-select:none; font-weight:bold; }
+        #recordBtn.recording { background:#27ae60; }
+        #status { text-align:center; font-size:1em; color:#888; margin:5px 0; }
+        .box { background:#2d2d2d; border-radius:15px; padding:20px; margin:15px 0; position:relative; }
+        .label { color:#888; font-size:0.9em; margin-bottom:8px; }
+        .text { font-size:1.8em; line-height:1.5; min-height:50px; }
+        .original { color:#87CEEB; }
+        .translated { color:#90EE90; }
+        /* FIX: class 名稱統一為 omnivoice-btn */
+        .omnivoice-btn { position:absolute; right:15px; bottom:15px; background:#555; border:none; color:white; font-size:1.2em; border-radius:50%; width:40px; height:40px; cursor:pointer; transition:background 0.2s; }
+        .omnivoice-btn:hover { background:#777; }
+        .omnivoice-btn:disabled { opacity:0.4; cursor:default; }
+        #historyToggle { display:block; width:100%; background:#2d2d2d; border:none; color:#aaa; font-size:1em; padding:12px; border-radius:10px; cursor:pointer; margin:10px 0; text-align:left; }
+        #historyPanel { display:none; background:#2d2d2d; border-radius:15px; padding:15px; margin:10px 0; }
+        #historyPanel.open { display:block; }
+        .history-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+        .font-controls { display:flex; align-items:center; gap:8px; }
+        .font-btn { background:#444; border:none; color:white; font-size:1em; border-radius:5px; width:32px; height:32px; cursor:pointer; }
+        #fontSizeDisplay { color:#aaa; font-size:0.9em; min-width:40px; text-align:center; }
+        #historyBox { max-height:400px; overflow-y:auto; }
+        .history-item { background:#222; border-radius:10px; padding:12px; margin:5px 0; }
+        .history-meta { color:#666; font-size:0.8em; margin-bottom:5px; }
+        .history-orig { color:#87CEEB; margin:4px 0; }
+        .history-trans { color:#90EE90; margin:4px 0; }
+        .history-actions { display:flex; gap:8px; margin-top:8px; }
+        .action-btn { background:#333; border:none; color:#aaa; font-size:0.9em; border-radius:5px; padding:4px 10px; cursor:pointer; }
+        .action-btn:hover { background:#555; color:white; }
+    </style>
+</head>
+<body>
+    <h1>照護即時翻譯_TERJEMAHAN</h1>
+    <div style="margin:10px 0;">
+    <select id="srcLang" style="width:100%; background:#444; color:white; border:1px solid #666; border-radius:8px; padding:10px; font-size:0.9em; margin-bottom:8px;">
+        <option value="auto">🌐 auto 自動偵測</option>
+        <option value="zh-TW">🇹🇼 zh-TW 繁體中文</option>
+        <option value="zh-CN">🇨🇳 zh-CN 簡體中文</option>
+        <option value="en">🇺🇸 en English 英文</option>
+        <option value="id">🇮🇩 id Bahasa Indonesia 印尼文</option>
+        <option value="fil">🇵🇭 fil Filipino 菲律賓文</option>
+        <option value="th">🇹🇭 th Thai ภาษาไทย 泰文</option>
+        <option value="vi">🇻🇳 vi Tiếng Việt 越南文</option>
+        <option value="ja">🇯🇵 ja 日本語</option>
+        <option value="ko">🇰🇷 ko 한국어</option>
+        <option value="my">🇲🇲 my မြန်မာ</option>
+        <option value="ne">🇳🇵 ne नेपाली</option>
+        <option value="hi">🇮🇳 hi हिन्दी</option>
+    </select>
+    <div style="text-align:center; margin-bottom:8px;">
+        <button id="swapBtn" style="background:#555; border:none; color:white; font-size:1.6em; border-radius:50%; width:48px; height:48px; cursor:pointer;">⇄</button>
+    </div>
+    <select id="tgtLang" style="width:100%; background:#444; color:white; border:1px solid #666; border-radius:8px; padding:10px; font-size:0.9em;">
+        <option value="en">🇺🇸 en English 英文</option>
+        <option value="zh-TW">🇹🇼 zh-TW 繁體中文</option>
+        <option value="zh-CN">🇨🇳 zh-CN 簡體中文</option>
+        <option value="id">🇮🇩 id Bahasa Indonesia 印尼文</option>
+        <option value="fil">🇵🇭 fil Filipino 菲律賓文</option>
+        <option value="th">🇹🇭 th Thai ภาษาไทย 泰文</option>
+        <option value="vi">🇻🇳 vi Tiếng Việt 越南文</option>
+        <option value="ja">🇯🇵 ja 日本語</option>
+        <option value="ko">🇰🇷 ko 한국어</option>
+        <option value="my">🇲🇲 my မြန်မာ</option>
+        <option value="ne">🇳🇵 ne नेपाली</option>
+        <option value="hi">🇮🇳 hi हिन्दी</option>
+    </select>
+</div>
+    <button id="recordBtn">點擊說話Klik untuk Berbicara</button>
+    <div id="status">準備就緒SIAP</div>
+    <div class="box">
+    <div class="label" id="origLabel">原文Asli</div>
+    <div class="text original" id="original">等待輸入...Menunggu...</div>
+    <div id="editArea" style="display:none; margin-top:10px;">
+        <textarea id="editText" style="width:100%; background:#1a1a1a; color:#87CEEB; border:1px solid #555; border-radius:8px; padding:10px; font-size:1.4em; min-height:80px; resize:vertical;"></textarea>
+        <button id="confirmEdit" style="margin-top:8px; background:#27ae60; border:none; color:white; padding:10px 20px; border-radius:8px; font-size:1em; cursor:pointer; width:100%;">✅ 確認並重新翻譯 Konfirmasi & Terjemahkan Ulang</button>
+    </div>
+    <button class="omnivoice-btn" id="editBtn" title="編輯原文" style="bottom:15px; right:60px;">✏️</button>
+</div>
+    <div class="box">
+        <div class="label" id="transLabel">翻譯結果Hasil terjemahan</div>
+        <div class="text translated" id="translated">等待...Menunggu...</div>
+        <!-- FIX: id 改為 omnivoiceBtn，class 改為 omnivoice-btn，兩者統一 -->
+        <button class="omnivoice-btn" id="omnivoiceBtn" title="播放語音">🔊</button>
+    </div>
+    <button id="historyToggle">📋 對話紀錄Log konteks</button>
+    <div id="historyPanel">
+        <div class="history-toolbar">
+            <span style="color:#aaa; font-size:0.9em">歷史紀錄Catatan riwayat</span>
+            <div class="font-controls">
+                <button class="font-btn" id="fontDown">A-</button>
+                <span id="fontSizeDisplay">14px</span>
+                <button class="font-btn" id="fontUp">A+</button>
+            </div>
+        </div>
+        <div id="historyBox"></div>
+    </div>
+
+    <script>
+        var socket = io();
+        var mediaRecorder, audioChunks = [];
+        var isRecording = false;
+        var btn = document.getElementById('recordBtn');
+        var status = document.getElementById('status');
+        var currentTranslated = '';
+        var currentAudioFile = null;
+        var currentTgtLang = 'en';
+        var historyFontSize = 14;
+
+        var srcLang = document.getElementById('srcLang');
+        var tgtLang = document.getElementById('tgtLang');
+        srcLang.value = localStorage.getItem('srcLang') || 'auto';
+        tgtLang.value = localStorage.getItem('tgtLang') || 'en';
+        srcLang.addEventListener('change', function() { localStorage.setItem('srcLang', this.value); });
+        tgtLang.addEventListener('change', function() { localStorage.setItem('tgtLang', this.value); });
+
+        document.getElementById('swapBtn').addEventListener('click', function() {
+            var s = srcLang.value, t = tgtLang.value;
+            if (s === 'auto') return;
+            srcLang.value = t; tgtLang.value = s;
+            localStorage.setItem('srcLang', srcLang.value);
+            localStorage.setItem('tgtLang', tgtLang.value);
+            var orig = document.getElementById('original').innerText;
+            var trans = document.getElementById('translated').innerText;
+            document.getElementById('original').innerText = trans;
+            document.getElementById('translated').innerText = orig;
+        });
+
+        document.getElementById('fontUp').addEventListener('click', function() {
+            if (historyFontSize < 50) { historyFontSize += 2; updateFontSize(); }
+        });
+        document.getElementById('fontDown').addEventListener('click', function() {
+            if (historyFontSize > 6) { historyFontSize -= 2; updateFontSize(); }
+        });
+        function updateFontSize() {
+            document.getElementById('fontSizeDisplay').innerText = historyFontSize + 'px';
+            document.querySelectorAll('.history-orig, .history-trans').forEach(function(el) {
+                el.style.fontSize = historyFontSize + 'px';
+            });
+        }
+
+        document.getElementById('historyToggle').addEventListener('click', function() {
+            document.getElementById('historyPanel').classList.toggle('open');
+        });
+
+        // =============================================================
+        // FIX 1: 🔊 按鈕邏輯完整重寫
+        //   - id 統一為 omnivoiceBtn
+        //   - 移除破損的 fetch('/latest_audio') 巢狀錯誤邏輯
+        //   - 優先播放已合成的音檔，否則請求即時合成
+        // =============================================================
+        document.getElementById('omnivoiceBtn').addEventListener('click', function() {
+            var self = this;
+            if (currentAudioFile) {
+                // 已有 TTS 音檔，直接播放
+                var audio = new Audio('/audio/' + currentAudioFile);
+                audio.play().catch(function(e) {
+                    console.error('播放失敗:', e);
+                    status.innerText = '播放失敗：' + e.message;
+                });
+            } else if (currentTranslated) {
+                // 尚未合成，請求即時 TTS，完成後 server 會 emit play_audio
+                self.disabled = true;
+                self.innerText = '⏳';
+                fetch('/omnivoice_api_play', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        text: currentTranslated,
+                        lang: currentTgtLang,
+                        sid: socket.id
+                    })
+                }).then(function(r) { return r.json(); })
+                  .then(function(d) {
+                      if (d.file) {
+                          currentAudioFile = d.file;
+                          new Audio('/audio/' + d.file).play();
+                      }
+                  })
+                  .catch(function(e) {
+                      console.error('TTS 請求失敗:', e);
+                      status.innerText = 'TTS 失敗：' + e.message;
+                  })
+                  .finally(function() {
+                      self.disabled = false;
+                      self.innerText = '🔊';
+                  });
+            } else {
+                status.innerText = '尚無翻譯結果可播放';
+            }
+        });
+
+        function addHistory(original, translated, detectedLang, tgtLang, timestamp) {
+            var historyBox = document.getElementById('historyBox');
+            var item = document.createElement('div');
+            item.className = 'history-item';
+            item.dataset.original = original;
+            item.dataset.translated = translated;
+            item.dataset.lang = tgtLang;
+            item.innerHTML =
+                '<div class="history-meta">' + (detectedLang || 'auto') + ' → ' + (tgtLang || 'auto') + ' | ' + timestamp + '</div>' +
+                '<div class="history-orig" style="font-size:' + historyFontSize + 'px">' + original + '</div>' +
+                '<div class="history-trans" style="font-size:' + historyFontSize + 'px">' + translated + '</div>' +
+                '<div class="history-actions">' +
+                    '<button class="action-btn" onclick="playHistoryItem(this)">🔊</button>' +
+                    '<button class="action-btn" onclick="copyItem(this)">📋</button>' +
+                    '<button class="action-btn" onclick="deleteItem(this)">🗑️</button>' +
+                '</div>';
+            historyBox.insertBefore(item, historyBox.firstChild);
+        }
+
+        // FIX 2: 歷史紀錄播放函式改名避免衝突，並補上 finally 復原
+        window.playHistoryItem = function(btn) {
+            var item = btn.closest('.history-item');
+            var origLabel = btn.innerText;
+            btn.innerText = '⏳';
+            btn.style.opacity = '0.4';
+            btn.disabled = true;
+            fetch('/omnivoice_api_play', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    text: item.dataset.translated,
+                    lang: item.dataset.lang,
+                    sid: socket.id
+                })
+            }).catch(function(e) {
+                console.error('歷史播放失敗:', e);
+            }).finally(function() {
+                setTimeout(function() {
+                    btn.innerText = origLabel;
+                    btn.style.opacity = '1';
+                    btn.disabled = false;
+                }, 3000);
+            });
+        };
+
+        window.copyItem = function(btn) {
+            var item = btn.closest('.history-item');
+            navigator.clipboard.writeText(item.dataset.original + '\n' + item.dataset.translated);
+            var orig = btn.innerText;
+            btn.innerText = '✅ COPIED';
+            btn.style.color = '#4CAF50';
+            setTimeout(function() { btn.innerText = orig; btn.style.color = ''; }, 2000);
+        };
+
+        window.deleteItem = function(btn) {
+            if (confirm('確定要刪除這則對話紀錄嗎/Delete message/Hapus pesan？')) btn.closest('.history-item').remove();
+        };
+
+        function startRecording(stream) {
+            audioChunks = [];
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = function(e) { if (e.data.size > 0) audioChunks.push(e.data); };
+            mediaRecorder.onstop = function() {
+                var blob = new Blob(audioChunks, {type: 'audio/webm'});
+                var formData = new FormData();
+                formData.append('audio', blob, 'recording.webm');
+                formData.append('targetLang', tgtLang.value);
+                // FIX 3: 補上 sid，讓後端 TTS 完成後能 emit 回正確的 socket
+                formData.append('sid', socket.id);
+                formData.append('srcLang', srcLang.value);  // ← 新增這行
+                fetch('/record', {method: 'POST', body: formData})
+                    .catch(function(e) { status.innerText = '錯誤：' + e.message; });
+            };
+            mediaRecorder.start(100);
+        }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+            isRecording = false;
+            btn.classList.remove('recording');
+            btn.innerText = '點擊說話Klik untuk Berbicara';
+            status.innerText = '處理中Pengolahan...';
+        }
+
+        navigator.mediaDevices.getUserMedia({audio: true}).then(function(stream) {
+            window.toggleRecording = function() {
+                if (!isRecording) {
+                    startRecording(stream);
+                    isRecording = true;
+                    btn.classList.add('recording');
+                    btn.innerText = '🔴 錄音中,點擊停止Sedang merekam, klik untuk berhenti.';
+                    status.innerText = '錄音中,點擊結束Sedang merekam; klik untuk berhenti.';
+                    // 重置上一筆資料
+                    currentAudioFile = null;
+                    currentTranslated = '';
+                    document.getElementById('original').innerText = '說話中,Berbicara...';
+                    document.getElementById('translated').innerText = '等待中,Menunggu...';
+                    document.getElementById('omnivoiceBtn').disabled = true;
+                    document.getElementById('omnivoiceBtn').innerText = '⏳';
+                } else {
+                    stopRecording();
+                }
+            };
+            btn.addEventListener('click', window.toggleRecording);
+            btn.addEventListener('touchend', function(e) { e.preventDefault(); window.toggleRecording(); });
+        }).catch(function(e) { status.innerText = '無法存取麥克風Tidak dapat mengakses mikrofon.：' + e.message; });
+
+        // =============================================================
+        // FIX 4: socket update 事件 — 顯示原文翻譯後，重置音檔等待 TTS
+        //   原本收到 data.audio_file 就播放，但 n8n 流程裡 TTS 是事後
+        //   才執行，此時 audio_file 不會存在於 update 事件中。
+        //   正確做法：update 更新畫面 → 等 play_audio 事件再播音
+        // =============================================================
+        socket.on('update', function(data) {
+            currentTranslated = data.translated || '';
+            currentTgtLang = tgtLang.value;
+            // 重置音檔（新一筆翻譯，舊音檔作廢）
+            currentAudioFile = null;
+
+            document.getElementById('original').innerText = data.original || '';
+            document.getElementById('translated').innerText = data.translated || '';
+            status.innerText = '準備就緒-等待語音合成...Siap beroperasi–menunggu sintesis ucapan...';
+
+            // 按鈕顯示等待中（TTS 還在後端跑）
+            var playBtn = document.getElementById('omnivoiceBtn');
+            playBtn.disabled = true;
+            playBtn.innerText = '⏳';
+
+            var now = new Date();
+            var ts = now.getFullYear() + '-' +
+                String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                String(now.getDate()).padStart(2, '0') + ' ' +
+                String(now.getHours()).padStart(2, '0') + ':' +
+                String(now.getMinutes()).padStart(2, '0');
+            addHistory(data.original, data.translated, data.detectedLang, tgtLang.value, ts);
+        });
+
+        // =============================================================
+        // FIX 5: play_audio 事件 — TTS 完成後自動播放並解鎖按鈕
+        //   後端（omnivoice_api.py）合成完成後 emit play_audio，
+        //   前端收到後立即播放，並將 currentAudioFile 存起來供重播用
+        // =============================================================
+        socket.on('play_audio', function(data) {
+            var playBtn = document.getElementById('omnivoiceBtn');
+            playBtn.disabled = false;
+            playBtn.innerText = '🔊';
+            status.innerText = '準備就緒/Siap berangkat';
+
+            if (data.file) {
+                // 後端傳回檔名：播放並記錄供重播
+                currentAudioFile = data.file;
+                var audio = new Audio('/audio/' + data.file);
+                audio.play().catch(function(e) { console.error('自動播放失敗:Pemutaran otomatis gagal:', e); });
+            } else if (data.audio) {
+                // 後端傳回 base64（備用方式）
+                var audio = new Audio('data:audio/mp3;base64,' + data.audio);
+                audio.play().catch(function(e) { console.error('base64 播放失敗:Pemutaran gagal:', e); });
+            }
+        });
+
+        socket.on('auto_record', function() {
+            if (!isRecording) window.toggleRecording && window.toggleRecording();
+        });
+        socket.on('auto_stop', function() {
+            if (isRecording) window.toggleRecording && window.toggleRecording();
+        });
+        
+        // ===== 方案二：編輯原文重新翻譯 =====
+        document.getElementById('editBtn').addEventListener('click', function() {
+            var origText = document.getElementById('original').innerText;
+            if (origText === '等待輸入...Menunggu...' || origText === '說話中,Berbicara...') return;
+            document.getElementById('editText').value = origText;
+            document.getElementById('editArea').style.display = 'block';
+            document.getElementById('editText').focus();
+        });
+        document.getElementById('confirmEdit').addEventListener('click', function() {
+            var newText = document.getElementById('editText').value.trim();
+            if (!newText) return;
+            document.getElementById('original').innerText = newText;
+            document.getElementById('editArea').style.display = 'none';
+            document.getElementById('translated').innerText = '翻譯中Sedang menerjemahkan...';
+            status.innerText = '重新翻譯中Saat ini sedang diterjemahkan ulang...';
+            fetch('/retranslate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    text: newText,
+                    targetLang: tgtLang.value,
+                    sid: socket.id
+                })
+            }).catch(function(e) { status.innerText = '錯誤：' + e.message; });
+        });  
+    </script>
+</body>
+</html>
